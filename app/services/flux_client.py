@@ -1,6 +1,5 @@
-from typing import Optional, Dict, Any, List
 import httpx
-import asyncio
+from typing import List, Optional
 from PIL import Image
 import io
 import base64
@@ -8,10 +7,9 @@ from app.core.config import settings
 
 class FluxClient:
     def __init__(self):
-        self.api_key = settings.AIMLAPI_KEY
-        self.base_url = "https://api.aiml.services/v1"
+        self.api_url = "https://api.aimlapi.com"
         self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {settings.AIMLAPI_KEY}",
             "Content-Type": "application/json"
         }
     
@@ -19,133 +17,132 @@ class FluxClient:
         self,
         prompt: str,
         negative_prompt: Optional[str] = None,
-        width: int = 768,
-        height: int = 768,
+        width: int = 1024,
+        height: int = 1024,
         num_inference_steps: int = 30,
         guidance_scale: float = 7.5,
-        control_image: Optional[str] = None,
-        control_type: Optional[str] = None,
-        control_strength: float = 0.8,
-        reference_image: Optional[str] = None,
-        reference_strength: float = 0.8,
-        style_preset: Optional[str] = None,
-        seed: Optional[int] = None,
         scheduler: str = "euler",
-        num_images: int = 1
+        style_preset: Optional[str] = None,
+        num_images: int = 1,
+        seed: Optional[int] = None,
     ) -> List[Image.Image]:
-        """Generate images using AIMLAPI's Flux Pro 1.1"""
+        """Generate images using AIMLAPI"""
+        # Convert dimensions to AIMLAPI format
+        size = f"{width}x{height}"
         
+        # Prepare the request payload
         payload = {
-            "model": "flux-pro-1.1",
             "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "width": width,
-            "height": height,
-            "num_inference_steps": num_inference_steps,
-            "guidance_scale": guidance_scale,
-            "scheduler": scheduler,
-            "num_images": num_images
+            "n": num_images,
+            "model": "flux-pro/v1.1",
+            "size": size,
+            "quality": "hd"  # Use HD quality for better results
         }
+        
+        if negative_prompt:
+            payload["negative_prompt"] = negative_prompt
         
         if seed is not None:
             payload["seed"] = seed
-            
-        if style_preset:
-            payload["style_preset"] = style_preset
-            
-        if control_image and control_type:
-            payload["control"] = {
-                "image": control_image,
-                "type": control_type,
-                "strength": control_strength
-            }
-            
-        if reference_image:
-            payload["reference"] = {
-                "image": reference_image,
-                "strength": reference_strength
-            }
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/flux/generate",
+                f"{self.api_url}/images/generations",
                 headers=self.headers,
                 json=payload,
                 timeout=60.0
             )
             
             if response.status_code != 200:
-                raise Exception(f"AIMLAPI error: {response.text}")
+                raise Exception(f"Image generation failed: {response.text}")
             
+            # Parse response and download images
             result = response.json()
             images = []
             
-            for img_data in result["images"]:
-                # Convert base64 to PIL Image
-                img_bytes = base64.b64decode(img_data)
-                img = Image.open(io.BytesIO(img_bytes))
-                images.append(img)
+            # Handle both possible response formats
+            image_list = result.get("images", [])
+            
+            for image_data in image_list:
+                image_url = image_data.get("url")
+                if image_url:
+                    # Download the image
+                    img_response = await client.get(image_url)
+                    if img_response.status_code == 200:
+                        img = Image.open(io.BytesIO(img_response.content))
+                        images.append(img)
             
             return images
     
     async def enhance_faces(self, image: Image.Image) -> Image.Image:
         """Enhance faces in the image using AIMLAPI"""
-        # Convert PIL Image to base64
+        # Convert image to base64
         buffered = io.BytesIO()
         image.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
+        image_base64 = base64.b64encode(buffered.getvalue()).decode()
         
+        # Prepare the request payload
         payload = {
-            "model": "flux-pro-1.1",
-            "image": img_str,
-            "face_enhance": True,
-            "face_enhance_strength": 0.8
+            "image": image_base64,
+            "model": "face-enhance"
         }
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/flux/enhance",
+                f"{self.api_url}/images/face-enhance",
                 headers=self.headers,
                 json=payload,
-                timeout=30.0
+                timeout=60.0
             )
             
             if response.status_code != 200:
-                raise Exception(f"AIMLAPI error: {response.text}")
+                raise Exception(f"Face enhancement failed: {response.text}")
             
+            # Parse response and return enhanced image
             result = response.json()
-            img_bytes = base64.b64decode(result["image"])
-            return Image.open(io.BytesIO(img_bytes))
+            enhanced_url = result.get("url")
+            
+            if enhanced_url:
+                img_response = await client.get(enhanced_url)
+                if img_response.status_code == 200:
+                    return Image.open(io.BytesIO(img_response.content))
+            
+            raise Exception("Failed to get enhanced image URL")
     
-    async def upscale_image(
-        self,
-        image: Image.Image,
-        scale_factor: float = 2.0
-    ) -> Image.Image:
-        """Upscale image using AIMLAPI"""
+    async def upscale_image(self, image: Image.Image, factor: float = 2.0) -> Image.Image:
+        """Upscale the image using AIMLAPI"""
+        # Convert image to base64
         buffered = io.BytesIO()
         image.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
+        image_base64 = base64.b64encode(buffered.getvalue()).decode()
         
+        # Prepare the request payload
         payload = {
-            "model": "flux-pro-1.1",
-            "image": img_str,
-            "scale_factor": scale_factor
+            "image": image_base64,
+            "scale_factor": factor,
+            "model": "upscale"
         }
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/flux/upscale",
+                f"{self.api_url}/images/upscale",
                 headers=self.headers,
                 json=payload,
-                timeout=30.0
+                timeout=60.0
             )
             
             if response.status_code != 200:
-                raise Exception(f"AIMLAPI error: {response.text}")
+                raise Exception(f"Image upscaling failed: {response.text}")
             
+            # Parse response and return upscaled image
             result = response.json()
-            img_bytes = base64.b64decode(result["image"])
-            return Image.open(io.BytesIO(img_bytes))
+            upscaled_url = result.get("url")
+            
+            if upscaled_url:
+                img_response = await client.get(upscaled_url)
+                if img_response.status_code == 200:
+                    return Image.open(io.BytesIO(img_response.content))
+            
+            raise Exception("Failed to get upscaled image URL")
 
 flux_client = FluxClient()

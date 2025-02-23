@@ -1,13 +1,19 @@
 from pydantic_settings import BaseSettings
 from typing import List, Union
 from pydantic import AnyHttpUrl, validator
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Flux Pro MCP"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     AIMLAPI_KEY: str
-    SCRAPEGRAPH_API_KEY: str
+    SGAI_API_KEY: str
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:8000"]
     WS_MESSAGE_QUEUE_SIZE: int = 100
     MAX_CONCURRENT_REQUESTS: int = 5
@@ -24,5 +30,6 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
         env_file = ".env"
+        env_file_encoding = "utf-8"
 
 settings = Settings()

@@ -1,4 +1,4 @@
-# MCP (Model Control Panel)
+# MCP (Model Context Protocol)
 
 A FastAPI-based service for managing AI model interactions and web scraping capabilities.
 
@@ -46,7 +46,7 @@ BACKEND_CORS_ORIGINS=["http://localhost:8000"]
 
 # API Configuration
 AIMLAPI_KEY=your-aimlapi-key-here
-SCRAPEGRAPH_API_KEY=sgai-your-key-here
+SGAI_API_KEY=sgai-your-key-here
 
 # WebSocket Configuration
 WS_MESSAGE_QUEUE_SIZE=100
@@ -205,3 +205,56 @@ You can view the available tools and their arguments at any time by:
 3. Viewing the list of tools and their descriptions
 
 Note: This MCP server is only available for paying individual users of Windsurf. It is not available for Teams or Enterprise users.
+
+## Scraping Functionality
+
+The MCP server provides a web scraping functionality that allows users to extract information from websites. The scraping functionality is powered by ScrapeGraph, a powerful web scraping API.
+
+### Scraping Endpoints
+
+The MCP server provides the following scraping endpoints:
+
+* `POST /api/v1/scrape/search`: Search for content across the web
+* `POST /api/v1/scrape/extract`: Extract content from a URL
+* `POST /api/v1/scrape/analyze-sentiment`: Analyze the sentiment of text
+* `POST /api/v1/scrape/summarize`: Summarize text
+
+### Scraping Examples
+
+Here are some examples of how to use the scraping endpoints:
+
+* Search for content across the web:
+```bash
+curl -X POST http://localhost:8000/api/v1/scrape/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "search query",
+    "max_results": 10,
+    "filters": {}
+  }'
+```
+* Extract content from a URL:
+```bash
+curl -X POST http://localhost:8000/api/v1/scrape/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com"
+  }'
+```
+* Analyze the sentiment of text:
+```bash
+curl -X POST http://localhost:8000/api/v1/scrape/analyze-sentiment \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "text to analyze"
+  }'
+```
+* Summarize text:
+```bash
+curl -X POST http://localhost:8000/api/v1/scrape/summarize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "text to summarize",
+    "max_length": 100
+  }'
+```

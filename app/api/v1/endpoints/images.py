@@ -9,14 +9,15 @@ from app.schemas.image import (
     FluxStyle,
     ControlNetType
 )
-from app.services.model_registry import ModelRegistry
 from app.api.deps import get_model_registry, get_model
-from app.services.flux_client import flux_client
+from app.services.model_registry import ModelRegistry
+from app.services.flux_client import FluxClient
 from datetime import datetime
-import uuid
 import base64
 import io
 from PIL import Image
+import uuid
+import json
 import asyncio
 import httpx
 
@@ -29,6 +30,8 @@ UPSCALE_IMAGE_URL = f"{AIMLAPI_BASE_URL}/image/upscale"
 ENHANCE_FACE_URL = f"{AIMLAPI_BASE_URL}/image/enhance-face"
 STYLE_TRANSFER_URL = f"{AIMLAPI_BASE_URL}/image/style-transfer"
 INPAINTING_URL = f"{AIMLAPI_BASE_URL}/image/inpainting"
+
+_GENERATION_RESPONSES = {}
 
 @router.get("/models", response_model=List[MCPImageModel])
 async def list_models(
@@ -83,7 +86,7 @@ async def generate_image(
             detail=f"Model missing required capabilities: {', '.join(missing_capabilities)}"
         )
     
-    # Initialize response
+    # Create initial response
     response = ImageGenerationResponse(
         id=generation_id,
         status="processing",
@@ -99,6 +102,9 @@ async def generate_image(
         }
     )
     
+    # Store initial response
+    _GENERATION_RESPONSES[generation_id] = response
+    
     # Add background task for processing
     background_tasks.add_task(
         process_image_generation,
@@ -109,83 +115,69 @@ async def generate_image(
     
     return response
 
+@router.get("/models/{model_id}/generations/{generation_id}", response_model=ImageGenerationResponse)
+async def get_generation_status(
+    model_id: str,
+    generation_id: str,
+    model: MCPImageModel = Depends(get_model)
+) -> ImageGenerationResponse:
+    """Get the status of an image generation request"""
+    if generation_id not in _GENERATION_RESPONSES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Generation {generation_id} not found"
+        )
+    
+    return _GENERATION_RESPONSES[generation_id]
+
 async def process_image_generation(
     generation_id: str,
     model_id: str,
     context: ImageGenerationContext
-) -> ImageGenerationResponse:
+) -> None:
     """Process image generation using FastAPI"""
     try:
-        # Process control image if provided
-        control_signal = None
-        if context.control_image:
-            control_signal = await process_control_image(
-                context.control_image,
-                context.control_type,
-                context.control_strength or 0.8
-            )
-        
-        # Process reference image if provided
-        reference_embedding = None
-        if context.reference_image:
-            reference_embedding = await process_reference_image(
-                context.reference_image,
-                context.reference_strength or 0.5
-            )
+        # Initialize FluxClient
+        flux_client = FluxClient()
         
         # Generate base images
-        generated_images = await generate_base_images(
-            context.prompt,
-            context.negative_prompt,
-            context.num_images,
-            context.width,
-            context.height,
-            context.num_inference_steps,
-            context.guidance_scale
+        generated_images = await flux_client.generate_image(
+            prompt=context.prompt,
+            negative_prompt=context.negative_prompt,
+            width=context.width,
+            height=context.height,
+            num_inference_steps=context.num_inference_steps,
+            guidance_scale=context.guidance_scale,
+            scheduler=context.scheduler.value if context.scheduler else "euler",
+            style_preset=context.style_preset.value if context.style_preset else None,
+            num_images=context.batch_size,
+            seed=context.seed
         )
         
         # Post-process images based on context
         processed_images = []
         for img in generated_images:
-            # Convert to PIL Image
-            if isinstance(img, str):
-                # If image is base64
-                img_data = base64.b64decode(img)
-                img = Image.open(io.BytesIO(img_data))
-            elif isinstance(img, bytes):
-                # If image is bytes
-                img = Image.open(io.BytesIO(img))
-            
             # Apply face enhancement if requested
-            if context.enhance_face:
-                img_str = await enhance_faces(base64.b64encode(img.tobytes()).decode())
-                img_data = base64.b64decode(img_str)
-                img = Image.open(io.BytesIO(img_data))
+            if context.face_enhance:
+                img = await flux_client.enhance_faces(img)
             
             # Apply upscaling if requested
             if context.upscale_factor and context.upscale_factor > 1:
-                img_str = await upscale_image(base64.b64encode(img.tobytes()).decode(), context.upscale_factor)
-                img_data = base64.b64decode(img_str)
-                img = Image.open(io.BytesIO(img_data))
+                img = await flux_client.upscale_image(img, context.upscale_factor)
             
-            # Make tileable if requested
-            if context.make_tileable:
-                img_str = await make_tileable(base64.b64encode(img.tobytes()).decode())
-                img_data = base64.b64decode(img_str)
-                img = Image.open(io.BytesIO(img_data))
-            
-            # Convert back to base64
+            # Convert to base64
             buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
+            img.save(buffered, format=context.image_format.upper())
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
             processed_images.append({
                 "image": img_str,
                 "type": "base64",
-                "format": "PNG"
+                "format": context.image_format
             })
         
-        return ImageGenerationResponse(
+        # Update response with processed images
+        response = ImageGenerationResponse(
             id=generation_id,
             status="completed",
             created_at=datetime.utcnow(),
@@ -193,23 +185,95 @@ async def process_image_generation(
             metadata={
                 "model_id": model_id,
                 "prompt": context.prompt,
-                "negative_prompt": context.negative_prompt,
-                "width": context.width,
-                "height": context.height,
-                "num_images": context.num_images,
-                "scheduler": context.scheduler,
-                "num_inference_steps": context.num_inference_steps,
-                "guidance_scale": context.guidance_scale,
-                "style": context.style,
-                "seed": context.seed
+                "seed": context.seed or "random",
+                "style_preset": context.style_preset.value if context.style_preset else None,
+                "status": "completed"
             }
         )
         
+        # Store response for later retrieval
+        _GENERATION_RESPONSES[generation_id] = response
+        
+        print(f"Generation {generation_id} completed successfully")
+        
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Image generation failed: {str(e)}"
+        error_str = str(e)
+        # Check if this is actually a successful response
+        if "Image generation failed:" in error_str and '"images":' in error_str:
+            try:
+                # Extract the JSON response
+                json_str = error_str.split("Image generation failed: ", 1)[1]
+                result = json.loads(json_str)
+                
+                # Process the images from the response
+                processed_images = []
+                for img_data in result.get("images", []):
+                    img_url = img_data.get("url")
+                    if img_url:
+                        async with httpx.AsyncClient() as client:
+                            img_response = await client.get(img_url)
+                            if img_response.status_code == 200:
+                                img = Image.open(io.BytesIO(img_response.content))
+                                
+                                # Apply face enhancement if requested
+                                if context.face_enhance:
+                                    img = await flux_client.enhance_faces(img)
+                                
+                                # Apply upscaling if requested
+                                if context.upscale_factor and context.upscale_factor > 1:
+                                    img = await flux_client.upscale_image(img, context.upscale_factor)
+                                
+                                # Convert to base64
+                                buffered = io.BytesIO()
+                                img.save(buffered, format=context.image_format.upper())
+                                img_str = base64.b64encode(buffered.getvalue()).decode()
+                                
+                                processed_images.append({
+                                    "image": img_str,
+                                    "type": "base64",
+                                    "format": context.image_format
+                                })
+                
+                # Update response with processed images
+                response = ImageGenerationResponse(
+                    id=generation_id,
+                    status="completed",
+                    created_at=datetime.utcnow(),
+                    images=processed_images,
+                    metadata={
+                        "model_id": model_id,
+                        "prompt": context.prompt,
+                        "seed": result.get("seed", "random"),
+                        "style_preset": context.style_preset.value if context.style_preset else None,
+                        "status": "completed"
+                    }
+                )
+                
+                # Store response for later retrieval
+                _GENERATION_RESPONSES[generation_id] = response
+                
+                print(f"Generation {generation_id} completed successfully")
+                return
+            except Exception as parse_error:
+                error_str = f"Failed to parse successful response: {str(parse_error)}"
+        
+        # If we get here, it's a real error
+        print(f"Error processing generation {generation_id}: {error_str}")
+        response = ImageGenerationResponse(
+            id=generation_id,
+            status="error",
+            created_at=datetime.utcnow(),
+            images=[],
+            metadata={
+                "model_id": model_id,
+                "prompt": context.prompt,
+                "seed": context.seed or "random",
+                "style_preset": context.style_preset.value if context.style_preset else None,
+                "status": "error",
+                "error": error_str
+            }
         )
+        _GENERATION_RESPONSES[generation_id] = response
 
 async def process_control_image(
     image_data: str,
@@ -259,42 +323,6 @@ async def process_reference_image(
         raise HTTPException(
             status_code=400,
             detail=f"Failed to process reference image: {str(e)}"
-        )
-
-async def generate_base_images(
-    prompt: str,
-    negative_prompt: Optional[str] = None,
-    num_images: int = 1,
-    width: int = 512,
-    height: int = 512,
-    num_inference_steps: int = 50,
-    guidance_scale: float = 7.5,
-) -> List[str]:
-    """Generate base images using Flux Pro"""
-    try:
-        images = await flux_client.generate_image(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            num_images=num_images,
-            width=width,
-            height=height,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale
-        )
-        
-        # Convert PIL Images to base64
-        base64_images = []
-        for img in images:
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-            base64_images.append(img_str)
-        
-        return base64_images
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Image generation failed: {str(e)}"
         )
 
 async def enhance_faces(img_str: str) -> str:
@@ -491,7 +519,7 @@ async def enhance_face(
     
     try:
         # Set face enhancement flag
-        context.enhance_face = True
+        context.face_enhance = True
         
         return await process_image_generation(
             generation_id=generation_id,

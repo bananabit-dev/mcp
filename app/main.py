@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import images, websockets
+from app.api.v1.endpoints import images, websockets, scrape
 from app.core.config import settings
 from fastapi.staticfiles import StaticFiles
 from typing import Dict, List
@@ -50,6 +50,13 @@ def create_application() -> FastAPI:
         websockets.router,
         prefix="/api/v1/ws",
         tags=["websockets"]
+    )
+    
+    # Include scraping router
+    application.include_router(
+        scrape.router,
+        prefix="/api/v1/scrape",
+        tags=["scraping"]
     )
 
     @application.get("/health")
