@@ -11,3 +11,4 @@ websockets>=12.0
 aiohttp>=3.9.0
 asyncio>=3.4.3
 mcp>=1.3.0
+tenacity>=8.2.3

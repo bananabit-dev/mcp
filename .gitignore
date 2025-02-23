@@ -39,6 +39,7 @@ static/images/
 *.log
 *.sqlite3
 *.db
+.docs/
 
 # Coverage reports
 htmlcov/

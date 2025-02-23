@@ -100,22 +100,22 @@ def create_application() -> FastAPI:
                     "args": ["image"]
                 },
                 {
-                    "name": "upscale",
-                    "description": "Increase image resolution",
-                    "command": "/upscale",
-                    "args": ["image", "scale"]
+                    "name": "extract_webpage_content",
+                    "description": "Extract content from a specific URL",
+                    "command": "/api/v1/scrape/extract",
+                    "args": ["url"]
                 },
                 {
-                    "name": "style",
-                    "description": "Apply artistic styles to images",
-                    "command": "/style",
-                    "args": ["image", "style", "strength"]
+                    "name": "scrape_webpage",
+                    "description": "Scrape content from a webpage using ScrapeGraph",
+                    "command": "/api/v1/scrape/extract",
+                    "args": ["url"]
                 },
                 {
-                    "name": "scrape",
-                    "description": "Extract information from websites",
-                    "command": "/scrape",
-                    "args": ["url", "query", "max_results"]
+                    "name": "markdownify",
+                    "description": "Convert webpage content to clean markdown format",
+                    "command": "/api/v1/scrape/markdownify",
+                    "args": ["url", "clean_level"]
                 }
             ]
         }

@@ -96,7 +96,11 @@ async def generate_flux_image(
         return {"generation_id": generation_id, "status": "processing"}
     except Exception as e:
         logger.error(f"Image generation failed: {e}")
-        raise e
+        return {
+            "generation_id": None,
+            "status": "error",
+            "error": str(e)
+        }
 
 @mcp.tool(description="Get the status and results of an image generation")
 async def get_generation_result(generation_id: str):
@@ -134,7 +138,10 @@ async def get_generation_result(generation_id: str):
         return response
     except Exception as e:
         logger.error(f"Failed to get generation status: {e}")
-        raise e
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 @mcp.tool(description="Save a base64 encoded image to a file")
 async def save_generated_image(image_data: str, save_path: str):
@@ -175,7 +182,11 @@ async def save_generated_image(image_data: str, save_path: str):
         return {"path": str(save_path), "status": "saved"}
     except Exception as e:
         logger.error(f"Failed to save image: {e}")
-        raise e
+        return {
+            "path": None,
+            "status": "error",
+            "error": str(e)
+        }
 
 @mcp.tool(description="Extract content from a specific URL")
 async def extract_webpage_content(url: str):
@@ -183,10 +194,20 @@ async def extract_webpage_content(url: str):
     try:
         from app.services.scraper import scrape_service
         result = await scrape_service.extract_content(url)
+        if result.get("metadata", {}).get("status") in ["failed", "partial"]:
+            logger.warning(f"Content extraction partial/failed: {result.get('metadata', {}).get('error')}")
         return result
     except Exception as e:
         logger.error(f"Content extraction failed: {e}")
-        raise e
+        return {
+            "title": url,
+            "url": url,
+            "content": "",
+            "metadata": {
+                "status": "error",
+                "error": str(e)
+            }
+        }
 
 @mcp.tool(description="Analyze sentiment of text")
 async def analyze_text_sentiment(text: str):
@@ -197,7 +218,13 @@ async def analyze_text_sentiment(text: str):
         return result
     except Exception as e:
         logger.error(f"Sentiment analysis failed: {e}")
-        raise e
+        return {
+            "sentiment": None,
+            "metadata": {
+                "status": "error",
+                "error": str(e)
+            }
+        }
 
 @mcp.tool(description="Summarize text content")
 async def summarize_text(text: str, max_length: int = 100):
@@ -208,9 +235,14 @@ async def summarize_text(text: str, max_length: int = 100):
         return result
     except Exception as e:
         logger.error(f"Text summarization failed: {e}")
-        raise e
+        return {
+            "summary": "",
+            "metadata": {
+                "status": "error",
+                "error": str(e)
+            }
+        }
 
-# Add web scraping tool
 @mcp.tool(description="Scrape content from a webpage using ScrapeGraph")
 async def scrape_webpage(url: str):
     """Scrape and extract content from a webpage."""
@@ -220,7 +252,36 @@ async def scrape_webpage(url: str):
         return result
     except Exception as e:
         logger.error(f"Web scraping failed: {e}")
-        raise e
+        return {
+            "title": url,
+            "url": url,
+            "content": "",
+            "metadata": {
+                "status": "error",
+                "error": str(e)
+            }
+        }
+
+@mcp.tool(description="Convert webpage content to clean markdown format")
+async def markdownify_webpage(url: str, clean_level: str = "medium"):
+    """Convert webpage content to clean markdown format."""
+    try:
+        from app.services.scraper import scrape_service
+        result = await scrape_service.markdownify(url, clean_level)
+        if result.get("metadata", {}).get("status") in ["failed", "partial"]:
+            logger.warning(f"Markdownify partial/failed: {result.get('metadata', {}).get('error')}")
+        return result
+    except Exception as e:
+        logger.error(f"Markdownify failed: {e}")
+        return {
+            "title": url,
+            "url": url,
+            "content": "",
+            "metadata": {
+                "status": "error",
+                "error": str(e)
+            }
+        }
 
 def run():
     """Run the Bananabit MCP server."""

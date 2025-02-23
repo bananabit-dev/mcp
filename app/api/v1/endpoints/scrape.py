@@ -8,6 +8,10 @@ router = APIRouter()
 class ExtractRequest(BaseModel):
     url: str
 
+class MarkdownifyRequest(BaseModel):
+    url: str
+    clean_level: str = "medium"
+
 class TextRequest(BaseModel):
     text: str
 
@@ -28,6 +32,14 @@ async def extract_content(request: ExtractRequest) -> Dict[str, Any]:
     """Extract content from URL using ScrapeGraph"""
     try:
         return await scrape_service.extract_content(request.url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/markdownify", response_model=Dict[str, Any])
+async def markdownify(request: MarkdownifyRequest) -> Dict[str, Any]:
+    """Convert webpage content to clean markdown format"""
+    try:
+        return await scrape_service.markdownify(request.url, request.clean_level)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

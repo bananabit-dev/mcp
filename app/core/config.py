@@ -48,10 +48,10 @@ else:
     logger.info("No .env file found, using environment variables")
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = mcp_env_vars.get("PROJECT_NAME") or os.getenv("PROJECT_NAME", "Flux Pro MCP")
+    PROJECT_NAME: str = mcp_env_vars.get("PROJECT_NAME") or os.getenv("PROJECT_NAME", "Bananabit MCP")
     SGAI_API_KEY: str = mcp_env_vars.get("SGAI_API_KEY") or os.getenv("SGAI_API_KEY", "")
     AIMLAPI_KEY: str = mcp_env_vars.get("AIMLAPI_KEY") or os.getenv("AIMLAPI_KEY", "")
-    HOST: str = mcp_env_vars.get("HOST") or os.getenv("HOST", "0.0.0.0")
+    HOST: str = mcp_env_vars.get("HOST") or os.getenv("HOST", "127.0.0.1")
     PORT: int = int(mcp_env_vars.get("PORT") or os.getenv("PORT", "8000"))
     BACKEND_CORS_ORIGINS: Union[str, List[str]] = mcp_env_vars.get("BACKEND_CORS_ORIGINS") or os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:8000")
     WS_MESSAGE_QUEUE_SIZE: int = int(mcp_env_vars.get("WS_MESSAGE_QUEUE_SIZE") or os.getenv("WS_MESSAGE_QUEUE_SIZE", "100"))
