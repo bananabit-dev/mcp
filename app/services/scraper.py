@@ -4,6 +4,9 @@ from app.core.config import settings
 import uuid
 from datetime import datetime
 from scrapegraph_py import Client
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ScrapingContext(BaseModel):
     """Context for scraping operations"""
@@ -21,7 +24,19 @@ class ScrapingResult(BaseModel):
 class ScrapeGraphService:
     """Service for scraping operations using ScrapeGraph"""
     def __init__(self, api_key: str = settings.SGAI_API_KEY):
-        self.client = Client(api_key=api_key)
+        logger.info("Initializing ScrapeGraphService with API key: %s...", api_key[:8] if api_key else "None")
+        try:
+            if not api_key:
+                raise ValueError("SGAI_API_KEY is not set or is empty")
+            logger.info("Creating ScrapeGraph client...")
+            self.client = Client(api_key=api_key)
+            logger.info("Testing ScrapeGraph client connection...")
+            # Try a simple API call to verify the connection
+            self.client.ping()
+            logger.info("ScrapeGraph client initialized successfully")
+        except Exception as e:
+            logger.error("Failed to initialize ScrapeGraph client: %s", str(e))
+            raise ValueError(f"Invalid SGAI_API_KEY: {str(e)}")
 
     async def search(self, context: ScrapingContext) -> List[Dict[str, Any]]:
         """Search using ScrapeGraph"""
@@ -45,9 +60,9 @@ class ScrapeGraphService:
                     }
                 )
                 results.append(result.dict())
-            
             return results
         except Exception as e:
+            logger.error(f"Search failed: {str(e)}")
             raise Exception(f"Search failed: {str(e)}")
 
     async def extract_content(self, url: str) -> Dict[str, Any]:
@@ -76,6 +91,7 @@ class ScrapeGraphService:
             else:
                 raise Exception(f"Content extraction failed: {response.get('error', 'Unknown error')}")
         except Exception as e:
+            logger.error(f"Content extraction failed: {str(e)}")
             raise Exception(f"Content extraction failed: {str(e)}")
 
     async def analyze_sentiment(self, text: str) -> Dict[str, Any]:
@@ -94,6 +110,7 @@ class ScrapeGraphService:
                 }
             }
         except Exception as e:
+            logger.error(f"Sentiment analysis failed: {str(e)}")
             raise Exception(f"Sentiment analysis failed: {str(e)}")
 
     async def summarize(self, text: str, max_length: int = 100) -> str:
@@ -107,7 +124,13 @@ class ScrapeGraphService:
             
             return response.get("summary", "")
         except Exception as e:
+            logger.error(f"Summarization failed: {str(e)}")
             raise Exception(f"Summarization failed: {str(e)}")
 
-# Create a single instance to be used across the application
-scrape_service = ScrapeGraphService()
+# Create a single instance to be used across the application, but with error handling
+try:
+    scrape_service = ScrapeGraphService()
+    logger.info("Successfully initialized ScrapeGraphService")
+except Exception as e:
+    logger.error(f"Failed to initialize ScrapeGraphService: {str(e)}")
+    scrape_service = None  # Allow the application to start without scraping capability

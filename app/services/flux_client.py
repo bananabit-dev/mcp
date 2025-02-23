@@ -25,18 +25,22 @@ class FluxClient:
         style_preset: Optional[str] = None,
         num_images: int = 1,
         seed: Optional[int] = None,
-    ) -> List[Image.Image]:
+    ) -> dict:
         """Generate images using AIMLAPI"""
         # Convert dimensions to AIMLAPI format
         size = f"{width}x{height}"
         
-        # Prepare the request payload
+        # Prepare the request payload according to AIMLAPI spec
         payload = {
             "prompt": prompt,
             "n": num_images,
-            "model": "flux-pro/v1.1",
-            "size": size,
-            "quality": "hd"  # Use HD quality for better results
+            "model": "flux-pro",
+            "width": width,
+            "height": height,
+            "steps": num_inference_steps,
+            "cfg_scale": guidance_scale,
+            "scheduler": scheduler,
+            "quality": "standard"
         }
         
         if negative_prompt:
@@ -44,10 +48,13 @@ class FluxClient:
         
         if seed is not None:
             payload["seed"] = seed
+            
+        if style_preset:
+            payload["style"] = style_preset
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.api_url}/images/generations",
+                f"{self.api_url}/v1/images/generations",
                 headers=self.headers,
                 json=payload,
                 timeout=60.0
@@ -56,23 +63,28 @@ class FluxClient:
             if response.status_code != 200:
                 raise Exception(f"Image generation failed: {response.text}")
             
-            # Parse response and download images
+            if response.status_code != 200:
+                raise Exception(f"Image generation failed: {response.text}")
+                
+            # Parse response according to AIMLAPI spec
             result = response.json()
-            images = []
             
-            # Handle both possible response formats
-            image_list = result.get("images", [])
+            # Transform response to match our internal format
+            transformed_data = []
+            for image in result.get("data", []):
+                transformed_data.append({
+                    "url": image.get("url"),
+                    "meta": {
+                        "seed": result.get("meta", {}).get("seed"),
+                        "prompt": prompt,
+                        "model": "flux-pro"
+                    }
+                })
             
-            for image_data in image_list:
-                image_url = image_data.get("url")
-                if image_url:
-                    # Download the image
-                    img_response = await client.get(image_url)
-                    if img_response.status_code == 200:
-                        img = Image.open(io.BytesIO(img_response.content))
-                        images.append(img)
-            
-            return images
+            return {
+                "data": transformed_data,
+                "meta": result.get("meta", {})
+            }
     
     async def enhance_faces(self, image: Image.Image) -> Image.Image:
         """Enhance faces in the image using AIMLAPI"""

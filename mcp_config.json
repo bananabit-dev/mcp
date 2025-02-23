@@ -1,0 +1,27 @@
+{
+    "mcpServers": {
+        "bananabit": {
+            "command": "/home/YOURUSERNAME/.local/bin/uv",
+            "args": [
+                "--directory",
+                "/home/YOURUSERNAME/projects/mcp",
+                "run",
+                "/home/YOURUSERNAME/projects/mcp/.venv/bin/python",
+                "-m",
+                "app.mcp_server"
+            ],
+            "env": {
+                "PYTHONPATH": "/home/YOURUSERNAME/projects/mcp",
+                "AIMLAPI_KEY": "your_aimlapi_key_here",
+                "SGAI_API_KEY": "your_searchgraph_key_here",
+                "PROJECT_NAME": "bananabit",
+                "HOST": "127.0.0.1",
+                "PORT": "8000",
+                "BACKEND_CORS_ORIGINS": "http://localhost:8000",
+                "WS_MESSAGE_QUEUE_SIZE": "100",
+                "MAX_CONCURRENT_REQUESTS": "5",
+                "REQUEST_TIMEOUT_SECONDS": "300"
+            }
+        }
+    }
+}
