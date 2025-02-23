@@ -21,7 +21,6 @@ class ScrapingResult(BaseModel):
 class ScrapeGraphService:
     """Service for scraping operations using ScrapeGraph"""
     def __init__(self, api_key: str = settings.SGAI_API_KEY):
-        print("Initializing ScrapeGraphService with API key:", api_key)  # Debug print
         self.client = Client(api_key=api_key)
 
     async def search(self, context: ScrapingContext) -> List[Dict[str, Any]]:
