@@ -149,21 +149,22 @@ To use this MCP server in Windsurf, follow these steps:
 ```json
 {
   "mcpServers": {
-    "mcp-flux": {
+    "bananabit-mcp": {
       "command": "python",
       "args": [
         "-m",
         "app.main"
       ],
-      "cwd": "/path/to/mcp",
+      "cwd": "/absolute/path/to/mcp/repository/root",
       "env": {
         "AIMLAPI_KEY": "your-aimlapi-key",
-        "SCRAPEGRAPH_API_KEY": "your-scrapegraph-key"
+        "SGAI_API_KEY": "your-searchgraph-key"
       }
     }
   }
 }
 ```
+> **Important**: Replace `/absolute/path/to/mcp/repository/root` with the absolute path to where you cloned this repository. For example, if you cloned it to `/home/user/projects/mcp`, use that path.
 
 2. In Windsurf, click the hammer icon in the Cascade toolbar and click "Refresh" to load the MCP server.
 
